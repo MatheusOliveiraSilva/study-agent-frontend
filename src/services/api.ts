@@ -12,8 +12,9 @@ export interface StudyPlanRequest {
   thread_id: string;
   tech_xp: string;
   actual_tech_stack: string;
-  carrer_goals: string; // Corrigido para 'carrer_goals' como no exemplo
+  carrer_goals: string; // Note: This has a typo but matches the backend
   side_project_goal: string;
+  user_feedback?: string; // Optional field for chat feedback
   llm_config: LLMConfig;
 }
 

@@ -15,6 +15,9 @@ import {
 import { v4 as uuidv4 } from 'uuid'; // Import uuid to generate thread_id
 import ToolExecutionContainer from '../../components/ToolExecutionContainer';
 
+// Extrair base URL do endpoint
+const API_BASE_URL = STUDY_PLAN_ENDPOINT.split('/study_plan')[0];
+
 // Placeholder components for loading states
 const StandardLoadingSpinner: React.FC = () => <div className="loading-spinner">🌀 Carregando...</div>;
 const ToolsAnimation: React.FC = () => (
@@ -24,6 +27,14 @@ const ToolsAnimation: React.FC = () => (
   </div>
 );
 
+interface MessageData {
+  id: string;
+  type: 'text' | 'tool' | 'mentor' | 'mentor-typing';
+  content: string;
+  isSearching?: boolean;
+  timestamp: Date;
+}
+
 interface FormData {
   techExperience: string;
   techStack: string;
@@ -31,11 +42,9 @@ interface FormData {
   personalProjects: string;
 }
 
-interface MessageData {
-  id: string;
-  type: 'text' | 'tool' | 'mentor';
-  content: string;
-  isSearching?: boolean;
+interface UserFeedbackRequest {
+  studyPlanId: string;
+  message: string;
 }
 
 // Função auxiliar para tentar a requisição várias vezes
@@ -64,18 +73,33 @@ const StudyPlanForm: React.FC = () => {
     personalProjects: '',
   });
   const [isLoading, setIsLoading] = useState(false);
-  // Change to store messages instead of a single result string
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Add state for current processing node
   const [currentNode, setCurrentNode] = useState<string | null>(null);
-  // Add state to track if streaming has started
   const [streamingStarted, setStreamingStarted] = useState(false);
-  // Use ref to accumulate stream content efficiently
   const textContentRef = useRef<string>('');
-  const [isComplete, setIsComplete] = useState<boolean>(false); // Track if stream is complete
-  // Reference para o conteúdo acumulado da pesquisa
+  const [isComplete, setIsComplete] = useState<boolean>(false);
   const currentResearchContentRef = useRef<string>('');
+  const [userInput, setUserInput] = useState<string>('');
+  const [waitingResponse, setWaitingResponse] = useState<boolean>(false);
+  const [inputMessage, setInputMessage] = useState<string>("");
+  const [sendingMessage, setSendingMessage] = useState<boolean>(false);
+
+  // Get stored studyPlanId and threadId from localStorage if available
+  const getStoredId = (): { studyPlanId: string, threadId: string } => {
+    try {
+      const storedStudyPlanId = localStorage.getItem('studyPlanId') || '';
+      const storedThreadId = localStorage.getItem('threadId') || '';
+      return { studyPlanId: storedStudyPlanId, threadId: storedThreadId };
+    } catch (e) {
+      console.error("Error accessing localStorage:", e);
+      return { studyPlanId: '', threadId: '' };
+    }
+  };
+  
+  const stored = getStoredId();
+  const [studyPlanId, setStudyPlanId] = useState<string>(stored.studyPlanId);
+  const [threadId, setThreadId] = useState<string>(stored.threadId);
 
   // Add class to body when streaming is active
   useEffect(() => {
@@ -107,7 +131,8 @@ const StudyPlanForm: React.FC = () => {
       setMessages([{
         id: welcomeId,
         type: 'mentor',
-        content: 'Olá! Estou analisando suas informações e gerando um plano de estudos personalizado para você. Vou pesquisar os conteúdos mais relevantes baseados no seu perfil e objetivos.'
+        content: 'Olá! Estou analisando suas informações e gerando um plano de estudos personalizado para você. Vou pesquisar os conteúdos mais relevantes baseados no seu perfil e objetivos.',
+        timestamp: new Date()
       }]);
     }
   }, [streamingStarted, messages.length]);
@@ -120,7 +145,8 @@ const StudyPlanForm: React.FC = () => {
         setMessages(prev => [...prev, {
           id: `mentor-completion-${Date.now()}`,
           type: 'mentor',
-          content: 'Seu plano de estudos personalizado está pronto! ✅\n\nVocê pode fazer perguntas específicas sobre qualquer tópico do plano, pedir sugestões de recursos adicionais ou solicitar mais detalhes sobre alguma parte específica.\n\nComo posso ajudar você agora?'
+          content: 'Seu plano de estudos personalizado está pronto! ✅\n\nVocê pode fazer perguntas específicas sobre qualquer tópico do plano, pedir sugestões de recursos adicionais ou solicitar mais detalhes sobre alguma parte específica.\n\nComo posso ajudar você agora?',
+          timestamp: new Date()
         }]);
       }, 1500);
       
@@ -160,7 +186,8 @@ const StudyPlanForm: React.FC = () => {
           return [...prev, {
             id: messageId,
             type: 'mentor',
-            content: finalContent
+            content: finalContent,
+            timestamp: new Date()
           }];
         } else {
           // Atualizar a mensagem mais recente do mentor se tiver pouco conteúdo
@@ -179,7 +206,8 @@ const StudyPlanForm: React.FC = () => {
             return [...prev, {
               id: messageId,
               type: 'mentor',
-              content: finalContent
+              content: finalContent,
+              timestamp: new Date()
             }];
           }
         }
@@ -190,18 +218,77 @@ const StudyPlanForm: React.FC = () => {
   // Handle form submission and initiate streaming
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isComplete) {
+      // Handle user message submission
+      if (inputMessage.trim() === "") return;
+      
+      const userMessage: MessageData = {
+        id: `user-${Date.now()}`,
+        type: 'text',
+        content: inputMessage.trim(),
+        timestamp: new Date(),
+      };
+      
+      setMessages((prev) => [...prev, userMessage]);
+      setInputMessage("");
+      
+      // Show typing indicator
+      const typingMessage: MessageData = {
+        id: `mentor-typing-${Date.now()}`,
+        type: 'mentor-typing',
+        content: '',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, typingMessage]);
+      
+      try {
+        setSendingMessage(true);
+        await sendUserFeedback(inputMessage.trim());
+      } catch (error: any) {
+        console.error("Error sending feedback:", error);
+        
+        // Mensagem de erro mais específica
+        let errorMessage = "Failed to send message. Please try again.";
+        if (error.message.includes('network') || error.message.includes('Network')) {
+          errorMessage = "Connectivity error. Please check your internet connection.";
+        } else if (error.message.includes('HTTP error')) {
+          errorMessage = `Server error: ${error.message}`;
+        }
+        
+        setError(errorMessage);
+        // Remove typing indicator if error
+        setMessages((prev) => prev.filter(m => m.type !== "mentor-typing"));
+      } finally {
+        setSendingMessage(false);
+      }
+      return;
+    }
+    
+    // Original submission logic for study plan
     setIsLoading(true);
+    setStreamingStarted(false);
     setError(null);
+    setMessages([]);
+    setIsComplete(false);
     textContentRef.current = ''; // Reset text ref
     currentResearchContentRef.current = ''; // Reset research content ref
-    setMessages([]); // Reset messages
     setCurrentNode(null); // Reset node state
-    setStreamingStarted(false); // Reset streaming state
-    setIsComplete(false); // Reset completion state
+    
+    // Gerar um novo thread_id para esta sessão
+    const newThreadId = uuidv4();
+    setThreadId(newThreadId);
+    
+    // Salvar no localStorage
+    try {
+      localStorage.setItem('threadId', newThreadId);
+    } catch (e) {
+      console.error("Error saving threadId to localStorage:", e);
+    }
 
     // Prepare request data
     const requestData: StudyPlanRequest = {
-      thread_id: uuidv4(), // Generate a unique ID for this conversation
+      thread_id: newThreadId, // Use the new thread ID
       tech_xp: formData.techExperience,
       actual_tech_stack: formData.techStack,
       carrer_goals: formData.careerGoals, // Ensure this matches your backend field name
@@ -250,10 +337,21 @@ const StudyPlanForm: React.FC = () => {
       };
       let lastMessagesByNode: Record<string, string> = {};
       let mainContentMessage: string | null = null;
+      let currentSearchMessageId: string | null = null;
       
       // Track the last research node content to accumulate it
       let currentResearchContent = '';
       let currentResearchMessageId: string | null = null;
+
+      // Add searching indicator at the beginning of the process
+      const searchingIndicatorId = `searching-${Date.now()}`;
+      setMessages(prev => [...prev, {
+        id: searchingIndicatorId,
+        type: 'tool',
+        content: 'Searching for information to create your personalized study plan...',
+        isSearching: true,
+        timestamp: new Date()
+      }]);
 
       while (true) {
         try {
@@ -283,7 +381,8 @@ const StudyPlanForm: React.FC = () => {
                   setMessages(prev => [...prev, {
                     id: newId,
                     type: 'mentor',
-                    content: textContentRef.current.trim()
+                    content: textContentRef.current.trim(),
+                    timestamp: new Date()
                   }]);
                 }
               } else {
@@ -294,7 +393,8 @@ const StudyPlanForm: React.FC = () => {
                 setMessages(prev => [...prev, {
                   id: newMsgId,
                   type: 'mentor',
-                  content: textContentRef.current.trim()
+                  content: textContentRef.current.trim(),
+                  timestamp: new Date()
                 }]);
               }
               textContentRef.current = '';
@@ -320,6 +420,18 @@ const StudyPlanForm: React.FC = () => {
                   const content = responseObj.content || '';
                   const meta = responseObj.meta || {};
                   
+                  // Extract study plan ID if it exists in the meta
+                  if (meta.study_plan_id) {
+                    setStudyPlanId(meta.study_plan_id);
+                    // Save to localStorage
+                    try {
+                      localStorage.setItem('studyPlanId', meta.study_plan_id);
+                    } catch (e) {
+                      console.error("Error saving studyPlanId to localStorage:", e);
+                    }
+                    console.log("Study plan ID set:", meta.study_plan_id);
+                  }
+                  
                   // Get the node type from meta
                   const currentGraphNode = meta.langgraph_node || null;
                   
@@ -333,6 +445,9 @@ const StudyPlanForm: React.FC = () => {
 
                     // Handle different node types - processar pesquisa e conteúdo separadamente
                     if (currentGraphNode === 'research_node' || currentGraphNode === 'research') {
+                      // Remove searching indicator once we start getting research
+                      setMessages(prev => prev.filter(m => m.id !== searchingIndicatorId));
+                      
                       // Para blocos de conteúdo/research, sempre acumular em uma única mensagem
                       contentByNode['research'] += content;
                       textContentRef.current += content;
@@ -365,20 +480,41 @@ const StudyPlanForm: React.FC = () => {
                         setMessages(prev => [...prev, {
                           id: newMsgId,
                           type: 'mentor',
-                          content: currentResearchContentRef.current
+                          content: currentResearchContentRef.current,
+                          timestamp: new Date()
                         }]);
                       }
                     } 
                     // Handle tool executions separately (web search results)
                     else if (currentGraphNode === 'tools' && content) {
+                      // Remove searching indicator
+                      setMessages(prev => prev.filter(m => m.id !== searchingIndicatorId));
+                      
                       // Check if content is a web search result
-                      if (content.includes('Here are the web search results')) {
-                        setMessages(prev => [...prev, {
-                          id: `tool-${Date.now()}`,
-                          type: 'tool',
-                          content: content,
-                          isSearching: false
-                        }]);
+                      if (content.includes('Here are the web search results') || 
+                         content.includes('web search') ||
+                         content.includes('Searching for')) {
+                        
+                        // If this is a new search or the first search
+                        if (!currentSearchMessageId || !content.includes('additional results')) {
+                          const newId = `tool-${Date.now()}`;
+                          currentSearchMessageId = newId;
+                          
+                          setMessages(prev => [...prev, {
+                            id: newId,
+                            type: 'tool',
+                            content: content,
+                            isSearching: false,
+                            timestamp: new Date()
+                          }]);
+                        } else {
+                          // Update existing search with additional results
+                          setMessages(prev => prev.map(msg => 
+                            msg.id === currentSearchMessageId
+                              ? {...msg, content: msg.content + '\n\n' + content}
+                              : msg
+                          ));
+                        }
                       }
                     }
                   }
@@ -391,6 +527,9 @@ const StudyPlanForm: React.FC = () => {
           }
         } catch (streamError) {
           console.error('Stream reading error:', streamError);
+          
+          // Remove searching indicator if still present
+          setMessages(prev => prev.filter(m => m.id !== searchingIndicatorId));
           
           // If we have accumulated content, make sure it's displayed
           if (textContentRef.current.trim() && contentByNode['research']) {
@@ -420,6 +559,9 @@ const StudyPlanForm: React.FC = () => {
     } catch (err: any) {
       console.error('Error fetching or processing stream:', err);
       
+      // Remove searching indicator if still present
+      setMessages(prev => prev.filter(m => m.id.startsWith('searching-')));
+      
       // Tente criar um plano com qualquer conteúdo que tenha chegado
       createFallbackPlan();
       
@@ -434,6 +576,231 @@ const StudyPlanForm: React.FC = () => {
       setError(errorMessage);
       setIsComplete(true);
       setIsLoading(false);
+    }
+  };
+
+  const sendUserFeedback = async (message: string) => {
+    // Usa o threadId para garantir continuidade da conversa
+    if (!threadId) {
+      setError("Thread ID not found. Cannot send feedback. Try refreshing the page.");
+      return;
+    }
+
+    // Reutilizar a mesma estrutura da requisição original, mas adicionar o feedback
+    const requestData: StudyPlanRequest = {
+      thread_id: threadId,
+      tech_xp: formData.techExperience,
+      actual_tech_stack: formData.techStack,
+      carrer_goals: formData.careerGoals,
+      side_project_goal: formData.personalProjects,
+      user_feedback: message, // Adicionando o feedback do usuário
+      llm_config: {
+        model: "o4-mini",
+        provider: "openai",
+        reasoning_effort: "high",
+        temperature: 0,
+        max_tokens: 10000,
+      }
+    };
+    
+    console.log("Sending feedback to endpoint:", STUDY_PLAN_ENDPOINT);
+    console.log("Request data:", requestData);
+
+    try {
+      const response = await fetchWithRetry(STUDY_PLAN_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "text/event-stream"
+        },
+        body: JSON.stringify(requestData),
+      }, 2);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "No error details available");
+        console.error(`HTTP error! status: ${response.status}, details:`, errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is missing');
+      }
+
+      // Remove typing indicator
+      setMessages((prev) => prev.filter(m => m.type !== "mentor-typing"));
+
+      // Process the streaming response similar to initial plan generation
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      
+      // Temporary content buffer for text accumulation
+      let textBuffer = '';
+      let currentNode: string | null = null;
+      let searchMessageId: string | null = null;
+      let mentorMessageId: string | null = null;
+      
+      // Add searching indicator first to show that search is in progress
+      const searchingIndicatorId = `searching-${Date.now()}`;
+      setMessages(prev => [...prev, {
+        id: searchingIndicatorId,
+        type: 'tool',
+        content: 'Searching for additional information to answer your question...',
+        isSearching: true,
+        timestamp: new Date()
+      }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          // Flush any remaining content in the text buffer
+          if (textBuffer.trim()) {
+            // If we already have a mentor message, update it with final content
+            if (mentorMessageId) {
+              setMessages((prev) => prev.map(msg => 
+                msg.id === mentorMessageId 
+                  ? {...msg, content: textBuffer.trim()}
+                  : msg
+              ));
+            } else {
+              // Create final mentor message if none exists
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `mentor-${Date.now()}`,
+                  type: "mentor",
+                  content: textBuffer.trim(),
+                  timestamp: new Date(),
+                }
+              ]);
+            }
+          }
+          
+          // Remove searching indicator if it still exists
+          setMessages(prev => prev.filter(m => m.id !== searchingIndicatorId));
+          break;
+        }
+        
+        const chunk = new TextDecoder().decode(value);
+        buffer += chunk;
+        
+        // Process buffer line by line for SSE events
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || ''; // Keep the last incomplete line
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const jsonString = line.substring(6).trim();
+              if (jsonString) {
+                // Parse the JSON response
+                const responseObj: StreamChunk = JSON.parse(jsonString);
+                const content = responseObj.content || '';
+                const meta = responseObj.meta || {};
+                
+                // Get node type from meta
+                currentNode = meta.langgraph_node || currentNode;
+                
+                // Process based on node type
+                if (currentNode === 'research_node' || currentNode === 'research') {
+                  // Remove searching indicator once we start getting research data
+                  if (searchingIndicatorId) {
+                    setMessages(prev => prev.filter(m => m.id !== searchingIndicatorId));
+                  }
+                  
+                  // For research/content blocks, accumulate and then show
+                  textBuffer += content;
+                  
+                  // Update periodically to show progress
+                  if (content.includes('\n\n') || content.includes('.') || content.length > 100) {
+                    if (mentorMessageId) {
+                      // Update existing mentor message
+                      setMessages((prev) => prev.map(msg => 
+                        msg.id === mentorMessageId 
+                          ? {...msg, content: textBuffer}
+                          : msg
+                      ));
+                    } else {
+                      // Create new mentor message
+                      const newId = `mentor-${Date.now()}`;
+                      mentorMessageId = newId;
+                      
+                      setMessages((prev) => [
+                        ...prev,
+                        {
+                          id: newId,
+                          type: 'mentor',
+                          content: textBuffer,
+                          timestamp: new Date()
+                        }
+                      ]);
+                    }
+                  }
+                } 
+                // Handle tool executions (like web search)
+                else if (currentNode === 'tools' && content) {
+                  // Remove the generic searching indicator once we have real search results
+                  setMessages(prev => prev.filter(m => m.id !== searchingIndicatorId));
+                  
+                  // Check if content is a web search result
+                  if (content.includes('Here are the web search results') || 
+                      content.includes('web search') ||
+                      content.includes('Searching for')) {
+                    
+                    // If this is a new search (not continuation), create new search message
+                    if (!searchMessageId || !content.includes('additional results')) {
+                      const newId = `tool-${Date.now()}`;
+                      searchMessageId = newId;
+                      
+                      // Create new tool message
+                      setMessages(prev => [...prev, {
+                        id: newId,
+                        type: 'tool',
+                        content: content,
+                        isSearching: false,
+                        timestamp: new Date()
+                      }]);
+                    } else {
+                      // Update existing search with additional results
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === searchMessageId
+                          ? {...msg, content: msg.content + '\n\n' + content}
+                          : msg
+                      ));
+                    }
+                    
+                    // Reset text buffer after showing a search - do not accumulate search results with response
+                    textBuffer = '';
+                  } else if (content.trim()) {
+                    // If not clearly a search but still from tools, add to buffer
+                    textBuffer += content;
+                  }
+                } else if (content) {
+                  // For any other content
+                  textBuffer += content;
+                }
+              }
+            } catch (e) {
+              console.error('Error parsing JSON from stream:', e, 'Raw line:', line);
+              // Continue processing despite errors
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error sending feedback:", error);
+      // Remove typing indicator in case of error
+      setMessages(prev => prev.filter(m => m.type !== "mentor-typing"));
+      throw error;
+    }
+  };
+
+  // Handle enter key press in the input field
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
     }
   };
 
@@ -535,9 +902,21 @@ const StudyPlanForm: React.FC = () => {
                     {message.content}
                   </div>
                 </div>
+              ) : message.type === 'mentor-typing' ? (
+                <div key={message.id} className="mentor-message">
+                  <div className="mentor-avatar">AI</div>
+                  <div className="typing-indicator">
+                    <div className="typing-dot"></div>
+                    <div className="typing-dot"></div>
+                    <div className="typing-dot"></div>
+                  </div>
+                </div>
               ) : (
-                <div key={message.id} className="text-message">
-                  <pre>{message.content}</pre>
+                <div key={message.id} className="user-message">
+                  <div className="user-avatar">Eu</div>
+                  <div className="user-content">
+                    {message.content}
+                  </div>
                 </div>
               )
             ))}
@@ -557,9 +936,12 @@ const StudyPlanForm: React.FC = () => {
                 type="text" 
                 className="user-chat-input" 
                 placeholder="Faça uma pergunta sobre seu plano..." 
-                disabled={true} // Disabled for now as backend isn't ready
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                disabled={sendingMessage}
               />
-              <button className="send-button" disabled={true}>Enviar</button>
+              <button className="send-button" onClick={(e) => { e.preventDefault(); handleSubmit(e); }} disabled={sendingMessage}>Enviar</button>
             </div>
           )}
           
@@ -572,6 +954,16 @@ const StudyPlanForm: React.FC = () => {
                 setError(null); 
                 setCurrentNode(null);
                 setStreamingStarted(false);
+                
+                // Limpar o studyPlanId e threadId do estado e localStorage
+                setStudyPlanId("");
+                setThreadId("");
+                try {
+                  localStorage.removeItem('studyPlanId');
+                  localStorage.removeItem('threadId');
+                } catch (e) {
+                  console.error("Error clearing localStorage:", e);
+                }
               }}
               className="new-plan-button"
             >
