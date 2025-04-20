@@ -1,8 +1,19 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './StudyPlanForm.css'; // We will create this CSS file next
-// Import interfaces and constants from api service
-import { StudyPlanRequest, StreamChunk, LLMConfig, STUDY_PLAN_ENDPOINT } from '../../services/api';
+// Import interfaces, constants and helper functions from api service
+import { 
+  StudyPlanRequest, 
+  StreamChunk, 
+  LLMConfig, 
+  STUDY_PLAN_ENDPOINT,
+  isToolExecutionChunk,
+  isSetupChunk,
+  isContentChunk,
+  extractSearchQuery,
+  extractSearchResults
+} from '../../services/api';
 import { v4 as uuidv4 } from 'uuid'; // Import uuid to generate thread_id
+import ToolExecutionContainer from '../../components/ToolExecutionContainer';
 
 // Placeholder components for loading states
 const StandardLoadingSpinner: React.FC = () => <div className="loading-spinner">🌀 Carregando...</div>;
@@ -20,6 +31,13 @@ interface FormData {
   personalProjects: string;
 }
 
+interface MessageData {
+  id: string;
+  type: 'text' | 'tool';
+  content: string;
+  isSearching?: boolean;
+}
+
 const StudyPlanForm: React.FC = () => {
   const [formData, setFormData] = useState<FormData>({
     techExperience: '',
@@ -28,14 +46,39 @@ const StudyPlanForm: React.FC = () => {
     personalProjects: '',
   });
   const [isLoading, setIsLoading] = useState(false);
-  // Rename studyPlan state to result to better match streaming nature
-  const [result, setResult] = useState<string>('');
+  // Change to store messages instead of a single result string
+  const [messages, setMessages] = useState<MessageData[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Add state for current processing node
   const [currentNode, setCurrentNode] = useState<string | null>(null);
+  // Add state to track if streaming has started
+  const [streamingStarted, setStreamingStarted] = useState(false);
   // Use ref to accumulate stream content efficiently
-  const resultRef = useRef<string>('');
+  const textContentRef = useRef<string>('');
   const [isComplete, setIsComplete] = useState<boolean>(false); // Track if stream is complete
+
+  // Add class to body when streaming is active
+  useEffect(() => {
+    if (streamingStarted) {
+      document.body.classList.add('streaming-active');
+    } else {
+      document.body.classList.remove('streaming-active');
+    }
+    
+    return () => {
+      document.body.classList.remove('streaming-active');
+    };
+  }, [streamingStarted]);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messages.length > 0) {
+      const messagesContainer = document.querySelector('.messages-container');
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }
+  }, [messages]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -50,9 +93,10 @@ const StudyPlanForm: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-    resultRef.current = ''; // Reset result ref
-    setResult(''); // Reset result state
+    textContentRef.current = ''; // Reset text ref
+    setMessages([]); // Reset messages
     setCurrentNode(null); // Reset node state
+    setStreamingStarted(false); // Reset streaming state
     setIsComplete(false); // Reset completion state
 
     // Prepare request data
@@ -72,6 +116,9 @@ const StudyPlanForm: React.FC = () => {
     };
 
     try {
+      // Immediately show the title with loading spinner
+      setStreamingStarted(true);
+      
       const response = await fetch(STUDY_PLAN_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -99,7 +146,17 @@ const StudyPlanForm: React.FC = () => {
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
+          // Flush any remaining content in the text buffer
+          if (textContentRef.current.trim()) {
+            setMessages(prev => [...prev, {
+              id: `text-${Date.now()}`,
+              type: 'text',
+              content: textContentRef.current.trim()
+            }]);
+            textContentRef.current = '';
+          }
           setIsComplete(true); // Mark stream as complete
+          setIsLoading(false); // Stop loading spinner
           break;
         }
 
@@ -115,13 +172,62 @@ const StudyPlanForm: React.FC = () => {
               const jsonString = line.substring(6).trim();
               if (jsonString) { // Ensure jsonString is not empty
                 const jsonData: StreamChunk = JSON.parse(jsonString);
-                // Update state based on parsed data
-                if (jsonData.content) {
-                  resultRef.current += jsonData.content;
-                  setResult(resultRef.current);
-                }
+                
+                // Update current node
                 if (jsonData.meta && jsonData.meta.langgraph_node) {
+                  const prevNode = currentNode;
                   setCurrentNode(jsonData.meta.langgraph_node);
+                  
+                  // If we're switching from content to tools, flush text content
+                  if (
+                    prevNode && 
+                    prevNode !== 'tools' && 
+                    jsonData.meta.langgraph_node === 'tools' && 
+                    textContentRef.current.trim()
+                  ) {
+                    setMessages(prev => [...prev, {
+                      id: `text-${Date.now()}`,
+                      type: 'text',
+                      content: textContentRef.current.trim()
+                    }]);
+                    textContentRef.current = '';
+                  }
+                }
+                
+                // Skip setup chunks
+                if (isSetupChunk(jsonData)) {
+                  continue;
+                }
+                
+                // Handle tool execution chunks
+                if (isToolExecutionChunk(jsonData) && jsonData.content) {
+                  setMessages(prev => [...prev, {
+                    id: `tool-${Date.now()}`,
+                    type: 'tool',
+                    content: jsonData.content || '',
+                    isSearching: false // Already completed
+                  }]);
+                }
+                // Handle content chunks (non-tool, non-setup)
+                else if (isContentChunk(jsonData)) {
+                  // Accumulate content
+                  textContentRef.current += jsonData.content;
+                  
+                  // Only add as a message if it contains a sentence end or paragraph break
+                  // This prevents too many tiny messages
+                  if (
+                    textContentRef.current.includes('.\n') || 
+                    textContentRef.current.includes('.\n\n') ||
+                    textContentRef.current.endsWith('.') ||
+                    textContentRef.current.length > 150
+                  ) {
+                    setMessages(prev => [...prev, {
+                      id: `text-${Date.now()}`,
+                      type: 'text',
+                      content: textContentRef.current.trim()
+                    }]);
+                    textContentRef.current = '';
+                  }
                 }
               }
             } catch (e) {
@@ -133,27 +239,20 @@ const StudyPlanForm: React.FC = () => {
         }
       }
 
-      // Optional: Reset form fields after successful stream completion
-      // setFormData({ techExperience: '', techStack: '', careerGoals: '', personalProjects: '' });
-
     } catch (err: any) {
       console.error('Error fetching or processing stream:', err);
       setError(err.message || 'Falha ao gerar o plano de estudos. Verifique a conexão com a API e tente novamente.');
       setIsComplete(true); // Ensure loading stops even on error
-    } finally {
-      // Set loading to false only when the stream is marked as complete (success or error)
-      // This prevents the form from reappearing prematurely if the stream starts slowly
-      // We'll handle final loading state based on isComplete flag below
+      setIsLoading(false); // Stop loading spinner
     }
   };
 
-  // Determine if we are showing the form, loading indicator, or the result
-  const showForm = !isLoading && !isComplete;
-  const showLoading = isLoading && !isComplete;
-  const showResult = isComplete;
+  // Determine if we are showing the form or the content
+  const showForm = !streamingStarted;
+  const showContent = streamingStarted;
 
   return (
-    <div className="study-plan-form-container">
+    <div className={`study-plan-form-container ${streamingStarted ? 'streaming-active' : ''}`}>
       <h1>Crie seu Plano de Estudos Personalizado</h1>
       <p>Forneça algumas informações para que a IA possa gerar o melhor plano para você.</p>
 
@@ -216,34 +315,97 @@ const StudyPlanForm: React.FC = () => {
         </form>
       )}
 
-      {/* Loading indicator section */}
-      {showLoading && (
-        <div className="loading-indicator">
-          {currentNode === 'tools' ? (
-            <ToolsAnimation />
-          ) : (
-            <StandardLoadingSpinner />
-          )}
-          <p className="loading-status">Status: {currentNode || 'Iniciando...'}</p>
-          {/* Display partial results during loading */}
-          {result && (
-            <div className="partial-result">
-              <h3>Progresso:</h3>
-              <pre>{result}</pre>
+      {/* Content Container - Shows both during streaming and after completion */}
+      {showContent && (
+        <div className="study-plan-content">
+          <div className="study-plan-header">
+            <h2>Seu Plano de Estudos Personalizado:</h2>
+          </div>
+          
+          {error && <p className="error-message">{error}</p>}
+          
+          {/* Display messages in sequence */}
+          <div className="messages-container">
+            {messages.map((message) => (
+              message.type === 'tool' ? (
+                <ToolExecutionContainer 
+                  key={message.id}
+                  toolData={message.content}
+                  isSearching={message.isSearching}
+                />
+              ) : (
+                <div key={message.id} className="text-message">
+                  <pre>{message.content}</pre>
+                </div>
+              )
+            ))}
+            
+            {/* Add "Searching more info" indicator at the bottom when loading */}
+            {isLoading && messages.length > 0 && (
+              <div className="searching-indicator">
+                <div className="searching-spinner"></div>
+                <span>Searching more info...</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Final plan chat container placeholder */}
+          {isComplete && messages.length > 0 && (
+            <div className="final-plan-container">
+              <div className="final-plan-header">
+                <h3>Plano de Estudos Completo</h3>
+              </div>
+              <div className="chat-container">
+                <div className="ai-message">
+                  <div className="ai-avatar">AI</div>
+                  <div className="ai-content">
+                    <p>Aqui está seu plano de estudos completo. Você pode fazer perguntas sobre ele.</p>
+                    <div className="plan-sections">
+                      {messages.filter(msg => msg.type === 'text').map((msg, index) => (
+                        <div key={`section-${index}`} className="plan-section">
+                          <pre>{msg.content}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="user-input-container">
+                  <input 
+                    type="text" 
+                    className="user-chat-input" 
+                    placeholder="Faça uma pergunta sobre seu plano..." 
+                    disabled={true} // Disabled for now as backend isn't ready
+                  />
+                  <button className="send-button" disabled={true}>Enviar</button>
+                </div>
+              </div>
             </div>
+          )}
+          
+          {isComplete && (
+            <button 
+              onClick={() => { 
+                setIsLoading(false); 
+                setIsComplete(false); 
+                setMessages([]); 
+                setError(null); 
+                setCurrentNode(null);
+                setStreamingStarted(false);
+              }}
+              className="new-plan-button"
+            >
+              Gerar Novo Plano
+            </button>
           )}
         </div>
       )}
-
-      {/* Result section - shown after stream completion */}
-      {showResult && (
-        <div className="study-plan-result">
-          <h2>Seu Plano de Estudos Personalizado:</h2>
-          {error && <p className="error-message">{error}</p>} {/* Display error if completion was due to an error */}
-          <pre>{result || (error ? 'Nenhum plano gerado devido a erro.' : 'Nenhum conteúdo recebido.')}</pre>
-          <button onClick={() => { setIsLoading(false); setIsComplete(false); setResult(''); setError(null); setCurrentNode(null); /* Reset form? */ }}>
-            Gerar Novo Plano
-          </button>
+      
+      {/* Initial loading indicator - only shown before streaming starts but form is hidden */}
+      {!showForm && !messages.length && !error && (
+        <div className="loading-indicator-container">
+          <div className="loading-spinner"></div>
+          <span className="loading-text">Gerando o plano de estudos perfeito...</span>
         </div>
       )}
     </div>

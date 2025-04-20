@@ -1,3 +1,21 @@
+:root {
+  --bg-dark: #0d1117;
+  --bg-darker: #0a0c10;
+  --bg-card: #161b22;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent-blue: #58a6ff;
+  --accent-blue-light: #79c0ff;
+  --border-color: #30363d;
+  --pill-bg: #21262d;
+  --pill-hover: #30363d;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+}
+
 .study-plan-form-container {
   display: flex;
   flex-direction: column;
@@ -6,14 +24,17 @@
   max-width: 700px; /* Adjust max-width as needed */
   margin: 2rem auto;
   padding: 2rem;
-  background-color: var(--background-secondary);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  background-color: var(--bg-card);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
 }
 
 .study-plan-form-container h1 {
   margin-bottom: 0.5rem;
   color: var(--text-primary);
+  font-size: 2.5rem;
+  letter-spacing: -0.5px;
 }
 
 .study-plan-form-container p {
@@ -22,10 +43,15 @@
   text-align: center;
 }
 
+/* Form styles */
 .study-plan-form {
   display: flex;
   flex-direction: column;
   width: 100%;
+  background-color: var(--bg-card);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
 }
 
 .study-plan-form label {
@@ -36,28 +62,36 @@
 }
 
 .study-plan-form textarea {
-  margin-bottom: 1.5rem; /* Increased spacing */
-  min-height: 80px; /* Ensure textareas have a minimum height */
-  resize: vertical; /* Allow vertical resizing */
-  background-color: var(--background-primary); /* Slightly different background for inputs */
+  margin-bottom: 1.5rem;
+  min-height: 80px;
+  resize: vertical;
+  background-color: var(--bg-darker);
   border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px;
+  color: var(--text-primary);
 }
 
 .study-plan-form textarea:focus {
-   border-color: var(--accent-color);
-   box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.3); /* Add focus ring */
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
+  outline: none;
 }
-
 
 .study-plan-form button {
   margin-top: 1rem;
   padding: 0.8em 1.5em;
-  background-color: var(--accent-color);
+  background-color: var(--accent-blue);
   color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .study-plan-form button:hover {
-  background-color: #535bf2; /* Darker accent on hover */
+  background-color: var(--accent-blue-light);
 }
 
 .study-plan-form button:disabled {
@@ -67,8 +101,146 @@
 }
 
 .error-message {
-  color: #ff6b6b; /* Red color for errors */
+  color: #ff6b6b;
   margin-top: 1rem;
+}
+
+/* Loading and content styles */
+.study-plan-content {
+  margin-top: 2rem;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.study-plan-content h2 {
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.messages-container {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-darker);
+  position: relative;
+}
+
+.text-message {
+  margin: 1rem 0;
+  padding-left: 24px;
+  position: relative;
+}
+
+.text-message::before {
+  content: '•';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  color: var(--accent-blue);
+}
+
+.text-message pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+  color: var(--text-primary);
+}
+
+.loading-indicator-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 2rem 0;
+  height: 150px;
+}
+
+.loading-spinner {
+  border: 3px solid var(--border-color);
+  border-radius: 50%;
+  border-top: 3px solid var(--accent-blue);
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+.loading-text {
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.new-plan-button {
+  margin-top: 1.5rem;
+  padding: 0.8em 1.5em;
+  background-color: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.new-plan-button:hover {
+  background-color: var(--accent-blue-light);
+}
+
+/* Adjust tools-execution-list for the conversational format */
+.tools-execution-list {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+/* Bullet separator for websearch groups - REMOVE */
+.tool-execution-container {
+  margin: 16px 0;
+  position: relative;
+  padding-left: 24px;
+}
+
+.tool-execution-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  width: 2px;
+  background-color: var(--border-color);
+  z-index: 1;
+}
+
+/* Make line continuous between containers */
+.messages-container .tool-execution-container:not(:last-child)::before {
+  bottom: -16px; /* Extend down to connect with next container */
+}
+
+/* No bullets between search groups */
+.tool-execution-container + .tool-execution-container::after {
+  content: none;
+  display: none;
+}
+
+/* Hide header and description on second screen */
+.streaming-active .study-plan-form-container h1,
+.streaming-active .study-plan-form-container > p {
+  display: none;
 }
 
 .study-plan-result {
@@ -159,14 +331,227 @@
   background: none; /* Remove background if inherited */
 }
 
-/* Adjust button spacing in result */
-.study-plan-result button {
-  margin-top: 1.5rem;
-}
-
 /* Style disabled form elements */
 textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   background-color: var(--border-color);
+}
+
+/* Style for the very first message */
+.messages-container > :first-child {
+  margin-top: 0;
+}
+
+/* Style for the last message */
+.messages-container > :last-child {
+  margin-bottom: 0;
+}
+
+/* Study plan header with inline loading */
+.study-plan-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.study-plan-header h2 {
+  margin-bottom: 0;
+  color: var(--text-primary);
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+/* Chat container styles */
+.final-plan-container {
+  margin-top: 2rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-card);
+  overflow: hidden;
+}
+
+.final-plan-header {
+  padding: 12px 16px;
+  background-color: var(--bg-darker);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.final-plan-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+}
+
+.chat-container {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 800px;
+  overflow-y: auto;
+}
+
+.ai-message {
+  display: flex;
+  gap: 12px;
+}
+
+.ai-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--accent-blue);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ai-content {
+  background-color: var(--bg-darker);
+  padding: 16px;
+  border-radius: 8px;
+  color: var(--text-primary);
+  width: 100%;
+  max-height: 800px;
+  overflow-y: auto;
+}
+
+.ai-content p {
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+}
+
+.plan-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 700px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) var(--bg-darker);
+  padding-right: 8px;
+}
+
+/* Styling scrollbars for webkit browsers */
+.plan-sections::-webkit-scrollbar {
+  width: 8px;
+}
+
+.plan-sections::-webkit-scrollbar-track {
+  background: var(--bg-darker);
+  border-radius: 4px;
+}
+
+.plan-sections::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.plan-section {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-dark);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.user-input-container {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.user-chat-input {
+  flex: 1;
+  padding: 10px 12px;
+  background-color: var(--bg-darker);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.user-chat-input:focus {
+  border-color: var(--accent-blue);
+  outline: none;
+}
+
+.send-button {
+  padding: 8px 16px;
+  background-color: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.send-button:disabled {
+  background-color: var(--border-color);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Fix for the vertical line in tool execution containers */
+.tool-execution-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  width: 2px;
+  background-color: var(--border-color);
+  z-index: 1;
+}
+
+/* Ensure the vertical line is continuous */
+.messages-container {
+  position: relative;
+}
+
+/* Special handling for text messages that follow tool containers */
+.text-message::before {
+  z-index: 2; /* Ensure the bullet is above the line */
+}
+
+/* Searching indicator at the bottom of messages */
+.searching-indicator {
+  display: flex;
+  align-items: center;
+  margin: 16px 0 8px 24px; /* Add left margin to align with messages */
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  position: relative;
+}
+
+.searching-indicator::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background-color: var(--accent-blue);
+  border-radius: 50%;
+}
+
+.searching-spinner {
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  border-top: 2px solid var(--accent-blue);
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
 } 

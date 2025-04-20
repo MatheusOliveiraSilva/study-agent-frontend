@@ -1,0 +1,102 @@
+.tool-search-query {
+  display: inline-flex;
+  align-items: center;
+  background-color: #21262d;
+  padding: 8px 16px;
+  border-radius: 16px;
+  margin: 8px 0;
+  max-width: fit-content;
+  font-size: 14px;
+}
+
+.search-icon {
+  margin-right: 8px;
+  font-size: 16px;
+  color: #58a6ff;
+}
+
+.query-text {
+  color: #e6edf3;
+  font-weight: 400;
+}
+
+.tool-result {
+  display: inline-flex;
+  align-items: center;
+  background-color: #21262d;
+  padding: 6px 12px;
+  border-radius: 16px;
+  margin: 4px 4px 4px 0;
+  font-size: 14px;
+  color: #e6edf3;
+  transition: background-color 0.2s, border-color 0.2s;
+  position: relative;
+  border: 1px solid transparent;
+}
+
+.tool-result:hover {
+  background-color: #30363d;
+  border-color: #58a6ff;
+}
+
+/* Estilo específico para pills clicáveis */
+.tool-result[title]:hover {
+  background-color: #132f4c;
+  color: #58a6ff;
+}
+
+.tool-link {
+  color: #0366d6;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+
+.tool-link:hover {
+  text-decoration: underline;
+}
+
+.tool-link::before {
+  content: '🔗';
+  margin-right: 8px;
+}
+
+.tool-text {
+  color: #24292e;
+}
+
+/* Container for a set of search results */
+.tool-results-container {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 8px 0 12px 0;
+  gap: 6px;
+}
+
+/* Web search indicator */
+.web-search-indicator {
+  display: flex;
+  align-items: center;
+  color: #8b949e;
+  font-size: 14px;
+  margin: 12px 0 8px 0;
+}
+
+.web-search-indicator::before {
+  content: '🌐';
+  margin-right: 8px;
+}
+
+/* "More" indicator */
+.more-results-indicator {
+  display: inline-flex;
+  align-items: center;
+  background-color: #132f4c;
+  padding: 6px 12px;
+  border-radius: 16px;
+  margin: 4px 0;
+  font-size: 14px;
+  color: #58a6ff;
+  cursor: pointer;
+  font-weight: 500;
+} 

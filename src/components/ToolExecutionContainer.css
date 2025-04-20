@@ -1,0 +1,72 @@
+.tool-execution-container {
+  margin: 16px 0;
+  position: relative;
+  padding-left: 24px;
+}
+
+/* Vertical timeline line - make it continuous across all containers */
+.tool-execution-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  width: 2px;
+  background-color: #30363d; /* border color */
+  z-index: 1; /* Ensure line is behind bullets */
+}
+
+/* Make line continuous between containers */
+.messages-container .tool-execution-container:not(:last-child)::before {
+  bottom: -16px; /* Extend down to connect with next container */
+}
+
+/* Spacing between containers without bullets */
+.tool-execution-container + .tool-execution-container {
+  margin-top: 16px;
+}
+
+/* Completely remove any bullets between containers */
+.tool-execution-container + .tool-execution-container::after {
+  display: none;
+}
+
+/* Web search indicator */
+.web-search-indicator {
+  display: flex;
+  align-items: center;
+  color: #8b949e; /* text secondary */
+  font-size: 14px;
+  margin: 0 0 8px 0;
+  position: relative;
+  z-index: 2; /* Place above the line */
+}
+
+.web-search-indicator::before {
+  content: '🌐';
+  margin-right: 8px;
+}
+
+/* Tool results container */
+.tool-results-container {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 8px 0 12px 0;
+  gap: 6px;
+  position: relative;
+  z-index: 2; /* Place above the line */
+}
+
+/* More results indicator */
+.more-results-indicator {
+  display: inline-flex;
+  align-items: center;
+  background-color: #132f4c; /* darker blue */
+  padding: 6px 12px;
+  border-radius: 16px;
+  margin: 4px 0;
+  font-size: 14px;
+  color: #58a6ff; /* accent blue */
+  cursor: pointer;
+  font-weight: 500;
+} 
