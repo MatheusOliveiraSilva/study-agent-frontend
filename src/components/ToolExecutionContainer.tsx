@@ -36,46 +36,57 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
   useEffect(() => {
     if (!toolData) return;
     
-    // Split by lines and filter out empty ones
-    const lines = toolData.split('\n')
-      .map(line => line.trim())
-      .filter(line => line && line !== '---');
-    
-    if (lines.length === 0) return;
-    
-    // Extract the search query (first line)
-    const queryLine = lines[0];
-    
-    // Verificar se a query parece ser um erro
-    if (isErrorOrInvalidContent(queryLine)) {
-      console.warn('Skipping invalid search query:', queryLine);
-      return; // Não processe se a query parece ser uma mensagem de erro
-    }
-    
-    setSearchQuery(queryLine);
-    
-    // Check if the last line contains "X more" pattern
-    const lastLine = lines[lines.length - 1];
-    const moreMatch = lastLine.match(/(\d+)\s+more/i);
-    if (moreMatch) {
-      setMoreCount(parseInt(moreMatch[1]));
-      // Remove the "X more" line from processing
-      lines.pop();
-    } else {
-      setMoreCount(null);
-    }
-    
     try {
-      // First approach: try to process structured data with Source, Title, Content format
-      processStructuredData(lines.slice(1));
-    } catch (e) {
-      console.log('Error processing structured data, falling back to simple format', e);
-      // Second approach: treat each line as a simple result
-      processSimpleData(lines.slice(1));
+      // Split by lines and filter out empty ones
+      const lines = toolData.split('\n')
+        .map(line => line.trim())
+        .filter(line => line && line !== '---');
+      
+      if (lines.length === 0) return;
+      
+      // Extract the search query (first line)
+      const queryLine = lines[0];
+      
+      // Verificar se a query parece ser um erro
+      if (isErrorOrInvalidContent(queryLine)) {
+        console.warn('Skipping invalid search query:', queryLine);
+        return; // Não processe se a query parece ser uma mensagem de erro
+      }
+      
+      // Extract clean search query by removing prefix
+      let cleanQueryLine = queryLine;
+      if (cleanQueryLine.includes('Here are the web search results for the query:')) {
+        cleanQueryLine = cleanQueryLine.replace('Here are the web search results for the query:', '').trim();
+      }
+      
+      setSearchQuery(cleanQueryLine);
+      
+      // Check if the last line contains "X more" pattern
+      const lastLine = lines[lines.length - 1];
+      const moreMatch = lastLine.match(/(\d+)\s+more/i);
+      if (moreMatch) {
+        setMoreCount(parseInt(moreMatch[1]));
+        // Remove the "X more" line from processing
+        lines.pop();
+      } else {
+        setMoreCount(null);
+      }
+      
+      try {
+        // First approach: try to process structured data with Source, Title, Content format
+        processStructuredData(lines.slice(1));
+      } catch (e) {
+        console.log('Error processing structured data, falling back to simple format', e);
+        // Second approach: treat each line as a simple result
+        processSimpleData(lines.slice(1));
+      }
+      
+      // Reset show all state when new data comes in
+      setShowAllResults(false);
+    } catch (error) {
+      console.error('Error processing tool data:', error);
+      setSearchResults([]); // Reset results on error
     }
-    
-    // Reset show all state when new data comes in
-    setShowAllResults(false);
     
   }, [toolData]);
   

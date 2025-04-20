@@ -23,6 +23,14 @@ const ToolExecution: React.FC<ToolExecutionProps> = ({
       searchText = searchText.replace('Here are the web search results for the query:', '').trim();
     }
     
+    // Remover possíveis tags HTML ou formatação estranha
+    searchText = searchText.replace(/<[^>]*>?/gm, '');
+    
+    // Limitar o tamanho da query caso seja muito grande
+    if (searchText.length > 70) {
+      searchText = searchText.substring(0, 67) + '...';
+    }
+    
     // Create a Google search URL
     const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchText)}`;
     
@@ -30,7 +38,6 @@ const ToolExecution: React.FC<ToolExecutionProps> = ({
       <div 
         className="tool-search-query"
         onClick={() => window.open(googleSearchUrl, '_blank')}
-        style={{ cursor: 'pointer' }}
       >
         <span className="search-icon">🔍</span>
         <span className="query-text">{searchText}</span>

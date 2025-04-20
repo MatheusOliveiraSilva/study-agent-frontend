@@ -74,6 +74,8 @@ const StudyPlanForm: React.FC = () => {
   // Use ref to accumulate stream content efficiently
   const textContentRef = useRef<string>('');
   const [isComplete, setIsComplete] = useState<boolean>(false); // Track if stream is complete
+  // Reference para o conteúdo acumulado da pesquisa
+  const currentResearchContentRef = useRef<string>('');
 
   // Add class to body when streaming is active
   useEffect(() => {
@@ -134,33 +136,52 @@ const StudyPlanForm: React.FC = () => {
     }));
   };
 
-  // Add a new function to create a fallback plan
+  // Add a new function to create a fallback plan with improved error handling
   const createFallbackPlan = () => {
     // Se temos conteúdo acumulado, vamos tentar formar um plano mesmo com falhas
-    if (textContentRef.current.trim()) {
+    if (textContentRef.current.trim() || currentResearchContentRef.current) {
       const messageId = `mentor-fallback-${Date.now()}`;
+      
+      // Priorizar o conteúdo mais completo
+      const content = currentResearchContentRef.current.length > textContentRef.current.length ? 
+        currentResearchContentRef.current : textContentRef.current.trim();
+      
+      // Se não há conteúdo suficiente, adicionar uma mensagem explicativa
+      const finalContent = content.length < 50 ? 
+        `Não foi possível gerar um plano completo devido a problemas de conexão. Tente novamente em alguns instantes.` : 
+        content;
+      
       setMessages(prev => {
         // Verificar se já existe mensagem de mentor
-        const hasMentorMessage = prev.some(msg => msg.type === 'mentor');
+        const mentorMessages = prev.filter(msg => msg.type === 'mentor');
         
-        if (!hasMentorMessage) {
+        if (mentorMessages.length === 0) {
           // Se não existir mensagem de mentor, criar uma nova
           return [...prev, {
             id: messageId,
             type: 'mentor',
-            content: textContentRef.current
+            content: finalContent
           }];
         } else {
-          // Se existir, atualizar a mais recente
-          const lastMentorIndex = prev.map(m => m.type).lastIndexOf('mentor');
-          if (lastMentorIndex >= 0) {
-            return prev.map((msg, index) => 
-              index === lastMentorIndex
-                ? {...msg, content: msg.content + '\n\n' + textContentRef.current}
+          // Atualizar a mensagem mais recente do mentor se tiver pouco conteúdo
+          // ou adicionar uma nova mensagem se todas as mensagens existentes já tiverem conteúdo substancial
+          const lastMentorMsg = mentorMessages[mentorMessages.length - 1];
+          
+          // Se a última mensagem é muito curta, atualizar
+          if (lastMentorMsg.content.length < 100) {
+            return prev.map(msg => 
+              msg.id === lastMentorMsg.id
+                ? {...msg, content: finalContent}
                 : msg
             );
+          } else {
+            // Adicionar uma nova mensagem
+            return [...prev, {
+              id: messageId,
+              type: 'mentor',
+              content: finalContent
+            }];
           }
-          return prev;
         }
       });
     }
@@ -172,6 +193,7 @@ const StudyPlanForm: React.FC = () => {
     setIsLoading(true);
     setError(null);
     textContentRef.current = ''; // Reset text ref
+    currentResearchContentRef.current = ''; // Reset research content ref
     setMessages([]); // Reset messages
     setCurrentNode(null); // Reset node state
     setStreamingStarted(false); // Reset streaming state
@@ -228,6 +250,10 @@ const StudyPlanForm: React.FC = () => {
       };
       let lastMessagesByNode: Record<string, string> = {};
       let mainContentMessage: string | null = null;
+      
+      // Track the last research node content to accumulate it
+      let currentResearchContent = '';
+      let currentResearchMessageId: string | null = null;
 
       while (true) {
         try {
@@ -236,7 +262,13 @@ const StudyPlanForm: React.FC = () => {
             // Flush any remaining content in the text buffer
             if (textContentRef.current.trim()) {
               // Only update the latest research message if we have one
-              if (lastMessagesByNode['research']) {
+              if (currentResearchMessageId) {
+                setMessages(prev => prev.map(msg => 
+                  msg.id === currentResearchMessageId 
+                    ? {...msg, content: currentResearchContentRef.current}
+                    : msg
+                ));
+              } else if (lastMessagesByNode['research']) {
                 const messageToUpdate = messages.find(msg => msg.id === lastMessagesByNode['research']);
                 if (messageToUpdate) {
                   setMessages(prev => prev.map(msg => 
@@ -283,10 +315,14 @@ const StudyPlanForm: React.FC = () => {
               try {
                 const jsonString = line.substring(6).trim();
                 if (jsonString) { // Ensure jsonString is not empty
-                  const jsonData: StreamChunk = JSON.parse(jsonString);
+                  // Parse the JSON response object with content and meta
+                  const responseObj = JSON.parse(jsonString);
+                  const content = responseObj.content || '';
+                  const meta = responseObj.meta || {};
                   
-                  // Update current node
-                  const currentGraphNode = jsonData.meta?.langgraph_node || null;
+                  // Get the node type from meta
+                  const currentGraphNode = meta.langgraph_node || null;
+                  
                   if (currentGraphNode) {
                     setCurrentNode(currentGraphNode);
                     
@@ -294,52 +330,55 @@ const StudyPlanForm: React.FC = () => {
                     if (!contentByNode[currentGraphNode]) {
                       contentByNode[currentGraphNode] = '';
                     }
-                  }
-                  
-                  // Skip setup chunks
-                  if (isSetupChunk(jsonData)) {
-                    continue;
-                  }
-                  
-                  // Handle tool execution chunks (websearch results)
-                  if (isToolExecutionChunk(jsonData) && jsonData.content) {
-                    setMessages(prev => [...prev, {
-                      id: `tool-${Date.now()}`,
-                      type: 'tool',
-                      content: jsonData.content || '',
-                      isSearching: false // Already completed
-                    }]);
-                  }
-                  // Handle content chunks (non-tool, non-setup)
-                  else if (isContentChunk(jsonData) && currentGraphNode) {
-                    const content = jsonData.content || '';
-                    
-                    // Accumulate content by node type
-                    if (currentGraphNode === 'research' || currentGraphNode === 'content' || currentGraphNode === 'follow_up') {
-                      // For research/content, update the existing message if we have one
-                      contentByNode[currentGraphNode] += content;
+
+                    // Handle different node types - processar pesquisa e conteúdo separadamente
+                    if (currentGraphNode === 'research_node' || currentGraphNode === 'research') {
+                      // Para blocos de conteúdo/research, sempre acumular em uma única mensagem
+                      contentByNode['research'] += content;
                       textContentRef.current += content;
                       
-                      // Check if we have a significant amount of content to display
-                      if (textContentRef.current.length > 50) {
-                        if (lastMessagesByNode['research']) {
-                          // Update existing message
+                      // Se já temos uma mensagem de research, atualizá-la
+                      // Se não, verificar se é preciso criar uma
+                      if (currentResearchMessageId) {
+                        // Atualizar a mensagem existente
+                        currentResearchContentRef.current += content;
+                        
+                        // Atualizar a mensagem apenas periodicamente para evitar re-renderizações desnecessárias
+                        // ou quando tiver acumulado uma quantidade significativa de texto
+                        if (content.includes('\n\n') || content.includes('.') || content.length > 100) {
                           setMessages(prev => prev.map(msg => 
-                            msg.id === lastMessagesByNode['research'] 
-                              ? {...msg, content: contentByNode['research']}
+                            msg.id === currentResearchMessageId 
+                              ? {...msg, content: currentResearchContentRef.current}
                               : msg
                           ));
-                        } else {
-                          // Create a new research message
-                          const newMsgId = `mentor-${Date.now()}`;
-                          lastMessagesByNode['research'] = newMsgId;
-                          mainContentMessage = newMsgId;
-                          setMessages(prev => [...prev, {
-                            id: newMsgId,
-                            type: 'mentor',
-                            content: contentByNode['research']
-                          }]);
                         }
+                      } 
+                      // Se ainda não temos mensagem de research mas já temos conteúdo suficiente, criar uma
+                      else if (textContentRef.current.length > 20) {
+                        // Criar uma nova mensagem
+                        const newMsgId = `mentor-${Date.now()}`;
+                        currentResearchMessageId = newMsgId;
+                        currentResearchContentRef.current = textContentRef.current;
+                        lastMessagesByNode['research'] = newMsgId;
+                        mainContentMessage = newMsgId;
+                        
+                        setMessages(prev => [...prev, {
+                          id: newMsgId,
+                          type: 'mentor',
+                          content: currentResearchContentRef.current
+                        }]);
+                      }
+                    } 
+                    // Handle tool executions separately (web search results)
+                    else if (currentGraphNode === 'tools' && content) {
+                      // Check if content is a web search result
+                      if (content.includes('Here are the web search results')) {
+                        setMessages(prev => [...prev, {
+                          id: `tool-${Date.now()}`,
+                          type: 'tool',
+                          content: content,
+                          isSearching: false
+                        }]);
                       }
                     }
                   }
