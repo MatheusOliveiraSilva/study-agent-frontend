@@ -28,6 +28,7 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [moreCount, setMoreCount] = useState<number | null>(null);
+  const [showAllResults, setShowAllResults] = useState<boolean>(false);
 
   // Maximum results to show before "more" indicator
   const MAX_VISIBLE_RESULTS = 4;
@@ -44,6 +45,13 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
     
     // Extract the search query (first line)
     const queryLine = lines[0];
+    
+    // Verificar se a query parece ser um erro
+    if (isErrorOrInvalidContent(queryLine)) {
+      console.warn('Skipping invalid search query:', queryLine);
+      return; // Não processe se a query parece ser uma mensagem de erro
+    }
+    
     setSearchQuery(queryLine);
     
     // Check if the last line contains "X more" pattern
@@ -66,6 +74,9 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
       processSimpleData(lines.slice(1));
     }
     
+    // Reset show all state when new data comes in
+    setShowAllResults(false);
+    
   }, [toolData]);
   
   // Process data in "Title/Source/Content" format
@@ -73,8 +84,17 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
     const results: SearchResult[] = [];
     let currentResult: Partial<SearchResult> = {};
     
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    // Filtrar linhas que possam ser mensagens de erro
+    const filteredLines = lines.filter(line => !isErrorOrInvalidContent(line));
+    
+    // Se não há linhas após a filtragem, não continue
+    if (filteredLines.length === 0) {
+      setSearchResults([]);
+      throw new Error('No structured data found after filtering');
+    }
+    
+    for (let i = 0; i < filteredLines.length; i++) {
+      const line = filteredLines[i];
       
       if (line === '---') continue;
       
@@ -129,11 +149,40 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
       });
     }
     
+    // Após processar todos os resultados, verifique se algum foi encontrado
     if (results.length === 0) {
       throw new Error('No structured data found');
     }
     
     setSearchResults(results);
+  };
+  
+  // Verificar se o texto parece ser um erro ou não é um resultado de pesquisa
+  const isErrorOrInvalidContent = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    const errorPatterns = [
+      'erro',
+      'error',
+      'network error',
+      'falha',
+      'failed',
+      'não foi possível',
+      'could not',
+      'cannot',
+      'unable to'
+    ];
+    
+    // Verificar padrões de erro comuns
+    if (errorPatterns.some(pattern => lowerText.includes(pattern))) {
+      return true;
+    }
+    
+    // Verificar se o texto é muito curto e não tem formato de resultado
+    if (text.length < 10 && !text.includes(':')) {
+      return true;
+    }
+    
+    return false;
   };
   
   // Process simple data where each line is a result 
@@ -143,8 +192,15 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
       !line.startsWith('I ') && 
       !line.startsWith('Let me') && 
       !line.startsWith('According') &&
-      !line.startsWith('Now I')
+      !line.startsWith('Now I') &&
+      !isErrorOrInvalidContent(line)
     );
+    
+    // Se não sobrou nenhuma linha após a filtragem, parar o processamento
+    if (resultLines.length === 0) {
+      setSearchResults([]);
+      return;
+    }
     
     // Extract URLs from text
     const extractUrl = (text: string): string => {
@@ -180,13 +236,18 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
     setSearchResults(results);
   };
 
+  // Toggle function to show all results
+  const toggleShowAllResults = () => {
+    setShowAllResults(!showAllResults);
+  };
+
   if (!searchQuery) {
     return null;
   }
 
   // Determine how many results to show and if we need a "more" indicator
-  const visibleResults = searchResults.slice(0, MAX_VISIBLE_RESULTS);
-  const hasMoreResults = moreCount !== null || searchResults.length > MAX_VISIBLE_RESULTS;
+  const visibleResults = showAllResults ? searchResults : searchResults.slice(0, MAX_VISIBLE_RESULTS);
+  const hasMoreResults = !showAllResults && (moreCount !== null || searchResults.length > MAX_VISIBLE_RESULTS);
   const hiddenResultsCount = moreCount !== null ? moreCount : searchResults.length - MAX_VISIBLE_RESULTS;
 
   return (
@@ -213,8 +274,19 @@ const ToolExecutionContainer: React.FC<ToolExecutionContainerProps> = ({
             />
           ))}
           {hasMoreResults && (
-            <div className="more-results-indicator">
-              {hiddenResultsCount} more
+            <div 
+              className="more-results-indicator" 
+              onClick={toggleShowAllResults}
+            >
+              +{hiddenResultsCount} more
+            </div>
+          )}
+          {showAllResults && searchResults.length > MAX_VISIBLE_RESULTS && (
+            <div 
+              className="more-results-indicator" 
+              onClick={toggleShowAllResults}
+            >
+              Show less
             </div>
           )}
         </div>

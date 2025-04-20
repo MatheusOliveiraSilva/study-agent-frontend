@@ -1,7 +1,8 @@
 .tool-execution-container {
-  margin: 16px 0;
+  margin: 8px 0;
   position: relative;
   padding-left: 24px;
+  overflow: hidden;
 }
 
 /* Vertical timeline line - make it continuous across all containers */
@@ -33,18 +34,22 @@
 
 /* Web search indicator */
 .web-search-indicator {
+  font-size: 13px;
+  color: #9c9c9c;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
-  color: #8b949e; /* text secondary */
-  font-size: 14px;
-  margin: 0 0 8px 0;
-  position: relative;
-  z-index: 2; /* Place above the line */
 }
 
 .web-search-indicator::before {
-  content: '🌐';
-  margin-right: 8px;
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%239c9c9c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>');
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 
 /* Tool results container */
@@ -55,18 +60,27 @@
   gap: 6px;
   position: relative;
   z-index: 2; /* Place above the line */
+  margin-top: 8px;
 }
 
 /* More results indicator */
 .more-results-indicator {
-  display: inline-flex;
-  align-items: center;
-  background-color: #132f4c; /* darker blue */
-  padding: 6px 12px;
-  border-radius: 16px;
-  margin: 4px 0;
-  font-size: 14px;
-  color: #58a6ff; /* accent blue */
+  background-color: #132f4c;
+  padding: 4px 10px;
+  border-radius: 4px;
+  margin-top: 5px;
+  font-size: 13px;
+  color: #58a6ff;
+  display: inline-block;
   cursor: pointer;
-  font-weight: 500;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.more-results-indicator:hover {
+  background-color: #1a3d5c;
+  color: #79b8ff;
+}
+
+.more-results-indicator:active {
+  background-color: #0e2235;
 } 

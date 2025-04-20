@@ -23,10 +23,18 @@ const ToolExecution: React.FC<ToolExecutionProps> = ({
       searchText = searchText.replace('Here are the web search results for the query:', '').trim();
     }
     
+    // Create a Google search URL
+    const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchText)}`;
+    
     return (
-      <div className="tool-search-query">
+      <div 
+        className="tool-search-query"
+        onClick={() => window.open(googleSearchUrl, '_blank')}
+        style={{ cursor: 'pointer' }}
+      >
         <span className="search-icon">🔍</span>
         <span className="query-text">{searchText}</span>
+        <span className="search-link-indicator">↗</span>
       </div>
     );
   }
